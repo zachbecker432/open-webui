@@ -1591,6 +1591,15 @@ def process_file(
 
             if request.app.state.config.BYPASS_EMBEDDING_AND_RETRIEVAL or is_blacklisted:
                 Files.update_file_data_by_id(file.id, {"status": "completed"})
+                # Add blacklist flag to file metadata so search system knows to skip RAG queries
+                if is_blacklisted:
+                    Files.update_file_metadata_by_id(
+                        file.id,
+                        {
+                            "embedding_blacklisted": True,
+                            "file_extension": file_extension,
+                        },
+                    )
                 return {
                     "status": True,
                     "collection_name": None,
@@ -2450,7 +2459,14 @@ def process_files_batch(
             Files.update_file_data_by_id(file.id, {"content": text_content})
 
             if is_blacklisted:
-                # Skip embedding for blacklisted files
+                # Skip embedding for blacklisted files and mark them as blacklisted
+                Files.update_file_metadata_by_id(
+                    file.id,
+                    {
+                        "embedding_blacklisted": True,
+                        "file_extension": file_extension,
+                    },
+                )
                 results.append(BatchProcessFilesResult(file_id=file.id, status="completed"))
             else:
                 docs: List[Document] = [
