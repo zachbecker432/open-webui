@@ -2499,6 +2499,16 @@ RAG_ALLOWED_FILE_EXTENSIONS = PersistentConfig(
     ],
 )
 
+RAG_EMBEDDING_FILE_BLACKLIST = PersistentConfig(
+    "RAG_EMBEDDING_FILE_BLACKLIST",
+    "rag.file.embedding_blacklist",
+    [
+        ext.strip()
+        for ext in os.environ.get("RAG_EMBEDDING_FILE_BLACKLIST", "").split(",")
+        if ext.strip()
+    ],
+)
+
 RAG_EMBEDDING_ENGINE = PersistentConfig(
     "RAG_EMBEDDING_ENGINE",
     "rag.embedding_engine",

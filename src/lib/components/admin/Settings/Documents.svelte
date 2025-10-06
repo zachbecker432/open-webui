@@ -216,6 +216,9 @@
 			ALLOWED_FILE_EXTENSIONS: RAGConfig.ALLOWED_FILE_EXTENSIONS.split(',')
 				.map((ext) => ext.trim())
 				.filter((ext) => ext !== ''),
+			EMBEDDING_FILE_BLACKLIST: RAGConfig.EMBEDDING_FILE_BLACKLIST.split(',')
+				.map((ext) => ext.trim())
+				.filter((ext) => ext !== ''),
 			DOCLING_PICTURE_DESCRIPTION_LOCAL: JSON.parse(
 				RAGConfig.DOCLING_PICTURE_DESCRIPTION_LOCAL || '{}'
 			),
@@ -248,6 +251,7 @@
 
 		const config = await getRAGConfig(localStorage.token);
 		config.ALLOWED_FILE_EXTENSIONS = (config?.ALLOWED_FILE_EXTENSIONS ?? []).join(', ');
+		config.EMBEDDING_FILE_BLACKLIST = (config?.EMBEDDING_FILE_BLACKLIST ?? []).join(', ');
 
 		config.DOCLING_PICTURE_DESCRIPTION_LOCAL = JSON.stringify(
 			config.DOCLING_PICTURE_DESCRIPTION_LOCAL ?? {},
@@ -1250,6 +1254,26 @@
 									type="text"
 									placeholder={$i18n.t('e.g. pdf, docx, txt')}
 									bind:value={RAGConfig.ALLOWED_FILE_EXTENSIONS}
+									autocomplete="off"
+								/>
+							</Tooltip>
+						</div>
+					</div>
+
+					<div class="  mb-2.5 flex w-full justify-between">
+						<div class=" self-center text-xs font-medium">{$i18n.t('Embedding File Blacklist')}</div>
+						<div class="flex items-center relative">
+							<Tooltip
+								content={$i18n.t(
+									'File extensions that will be uploaded but not embedded for search. Separate multiple extensions with commas. Leave empty for no blacklist.'
+								)}
+								placement="top-start"
+							>
+								<input
+									class="flex-1 w-full text-sm bg-transparent outline-hidden"
+									type="text"
+									placeholder={$i18n.t('e.g. mp4, avi, mov')}
+									bind:value={RAGConfig.EMBEDDING_FILE_BLACKLIST}
 									autocomplete="off"
 								/>
 							</Tooltip>

@@ -572,9 +572,20 @@ def get_sources_from_items(
                     }
 
         elif item.get("type") == "file":
+            # Check if file is blacklisted from embedding
+            file_blacklisted = False
+            if item.get("file", {}).get("meta", {}).get("embedding_blacklisted"):
+                file_blacklisted = True
+            elif item.get("id"):
+                # Check file metadata for blacklist flag
+                file_object = Files.get_file_by_id(item.get("id"))
+                if file_object and file_object.meta and file_object.meta.get("embedding_blacklisted"):
+                    file_blacklisted = True
+            
             if (
                 item.get("context") == "full"
                 or request.app.state.config.BYPASS_EMBEDDING_AND_RETRIEVAL
+                or file_blacklisted
             ):
                 if item.get("file", {}).get("data", {}).get("content", ""):
                     # Manual Full Mode Toggle
