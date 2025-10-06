@@ -458,6 +458,7 @@ async def get_rag_config(request: Request, user=Depends(get_admin_user)):
         "FILE_IMAGE_COMPRESSION_WIDTH": request.app.state.config.FILE_IMAGE_COMPRESSION_WIDTH,
         "FILE_IMAGE_COMPRESSION_HEIGHT": request.app.state.config.FILE_IMAGE_COMPRESSION_HEIGHT,
         "ALLOWED_FILE_EXTENSIONS": request.app.state.config.ALLOWED_FILE_EXTENSIONS,
+        "EMBEDDING_FILE_BLACKLIST": request.app.state.config.EMBEDDING_FILE_BLACKLIST,
         # Integration settings
         "ENABLE_GOOGLE_DRIVE_INTEGRATION": request.app.state.config.ENABLE_GOOGLE_DRIVE_INTEGRATION,
         "ENABLE_ONEDRIVE_INTEGRATION": request.app.state.config.ENABLE_ONEDRIVE_INTEGRATION,
@@ -638,6 +639,7 @@ class ConfigForm(BaseModel):
     FILE_IMAGE_COMPRESSION_WIDTH: Optional[int] = None
     FILE_IMAGE_COMPRESSION_HEIGHT: Optional[int] = None
     ALLOWED_FILE_EXTENSIONS: Optional[List[str]] = None
+    EMBEDDING_FILE_BLACKLIST: Optional[List[str]] = None
 
     # Integration settings
     ENABLE_GOOGLE_DRIVE_INTEGRATION: Optional[bool] = None
@@ -955,6 +957,11 @@ async def update_rag_config(
         if form_data.ALLOWED_FILE_EXTENSIONS is not None
         else request.app.state.config.ALLOWED_FILE_EXTENSIONS
     )
+    request.app.state.config.EMBEDDING_FILE_BLACKLIST = (
+        form_data.EMBEDDING_FILE_BLACKLIST
+        if form_data.EMBEDDING_FILE_BLACKLIST is not None
+        else request.app.state.config.EMBEDDING_FILE_BLACKLIST
+    )
 
     # Integration settings
     request.app.state.config.ENABLE_GOOGLE_DRIVE_INTEGRATION = (
@@ -1133,6 +1140,7 @@ async def update_rag_config(
         "FILE_IMAGE_COMPRESSION_WIDTH": request.app.state.config.FILE_IMAGE_COMPRESSION_WIDTH,
         "FILE_IMAGE_COMPRESSION_HEIGHT": request.app.state.config.FILE_IMAGE_COMPRESSION_HEIGHT,
         "ALLOWED_FILE_EXTENSIONS": request.app.state.config.ALLOWED_FILE_EXTENSIONS,
+        "EMBEDDING_FILE_BLACKLIST": request.app.state.config.EMBEDDING_FILE_BLACKLIST,
         # Integration settings
         "ENABLE_GOOGLE_DRIVE_INTEGRATION": request.app.state.config.ENABLE_GOOGLE_DRIVE_INTEGRATION,
         "ENABLE_ONEDRIVE_INTEGRATION": request.app.state.config.ENABLE_ONEDRIVE_INTEGRATION,
@@ -1423,6 +1431,19 @@ def process_file(
 
     if file:
         try:
+            # Check if file extension is in the embedding blacklist
+            file_extension = os.path.splitext(file.filename)[1]
+            # Remove the leading dot from the file extension
+            file_extension = file_extension[1:] if file_extension else ""
+            
+            is_blacklisted = False
+            if request.app.state.config.EMBEDDING_FILE_BLACKLIST:
+                request.app.state.config.EMBEDDING_FILE_BLACKLIST = [
+                    ext for ext in request.app.state.config.EMBEDDING_FILE_BLACKLIST if ext
+                ]
+                
+                if file_extension.lower() in [ext.lower() for ext in request.app.state.config.EMBEDDING_FILE_BLACKLIST]:
+                    is_blacklisted = True
 
             collection_name = form_data.collection_name
 
@@ -1568,7 +1589,7 @@ def process_file(
             hash = calculate_sha256_string(text_content)
             Files.update_file_hash_by_id(file.id, hash)
 
-            if request.app.state.config.BYPASS_EMBEDDING_AND_RETRIEVAL:
+            if request.app.state.config.BYPASS_EMBEDDING_AND_RETRIEVAL or is_blacklisted:
                 Files.update_file_data_by_id(file.id, {"status": "completed"})
                 return {
                     "status": True,
@@ -2408,27 +2429,45 @@ def process_files_batch(
     all_docs: List[Document] = []
     for file in form_data.files:
         try:
-            text_content = file.data.get("content", "")
+            # Check if file extension is in the embedding blacklist
+            file_extension = os.path.splitext(file.filename)[1]
+            # Remove the leading dot from the file extension
+            file_extension = file_extension[1:] if file_extension else ""
+            
+            is_blacklisted = False
+            if request.app.state.config.EMBEDDING_FILE_BLACKLIST:
+                request.app.state.config.EMBEDDING_FILE_BLACKLIST = [
+                    ext for ext in request.app.state.config.EMBEDDING_FILE_BLACKLIST if ext
+                ]
+                
+                if file_extension.lower() in [ext.lower() for ext in request.app.state.config.EMBEDDING_FILE_BLACKLIST]:
+                    is_blacklisted = True
 
-            docs: List[Document] = [
-                Document(
-                    page_content=text_content.replace("<br/>", "\n"),
-                    metadata={
-                        **file.meta,
-                        "name": file.filename,
-                        "created_by": file.user_id,
-                        "file_id": file.id,
-                        "source": file.filename,
-                    },
-                )
-            ]
+            text_content = file.data.get("content", "")
 
             hash = calculate_sha256_string(text_content)
             Files.update_file_hash_by_id(file.id, hash)
             Files.update_file_data_by_id(file.id, {"content": text_content})
 
-            all_docs.extend(docs)
-            results.append(BatchProcessFilesResult(file_id=file.id, status="prepared"))
+            if is_blacklisted:
+                # Skip embedding for blacklisted files
+                results.append(BatchProcessFilesResult(file_id=file.id, status="completed"))
+            else:
+                docs: List[Document] = [
+                    Document(
+                        page_content=text_content.replace("<br/>", "\n"),
+                        metadata={
+                            **file.meta,
+                            "name": file.filename,
+                            "created_by": file.user_id,
+                            "file_id": file.id,
+                            "source": file.filename,
+                        },
+                    )
+                ]
+
+                all_docs.extend(docs)
+                results.append(BatchProcessFilesResult(file_id=file.id, status="prepared"))
 
         except Exception as e:
             log.error(f"process_files_batch: Error processing file {file.id}: {str(e)}")
